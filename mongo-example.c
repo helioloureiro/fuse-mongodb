@@ -16,12 +16,12 @@ main (int   argc,
     mongoc_init ();
 
     client = mongoc_client_new ("mongodb://100.109.0.1:27017/testdb");
-    collection = mongoc_client_get_collection (client, "test", "test");
+    collection = mongoc_client_get_collection (client, "testdb", "testdb");
 
     doc = bson_new ();
     bson_oid_init (&oid, NULL);
     BSON_APPEND_OID (doc, "_id", &oid);
-    BSON_APPEND_UTF8 (doc, "hello", "world");
+    BSON_APPEND_UTF8 (doc, "/mnt/mongodb/myfile", "world");
 
     if (!mongoc_collection_insert (collection, MONGOC_INSERT_NONE, doc, NULL, &error)) {
         printf ("%s\n", error.message);
