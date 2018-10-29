@@ -1,20 +1,23 @@
-BINS = fuse-mongodb mongo-example
+BINS = fuse-mongodb
+BINS += mongo-example
 
-OBJS = fuse-mongodb.o mongo-example.o
-SRCS = fuse-mongodb.c mongo-example.c
+OBJS = fuse-mongodb.o
+OBJS += mongo-example.o
 
-INCLIB += $(shell pkg-config --cflags libbson-1.0)
-INCLIB += $(shell pkg-config --cflags libmongoc-1.0)
+SRCS =  fuse-mongodb.c
+SRCS += mongo-example.c
+
+INCLIB += $(shell pkg-config --cflags --libs libbson-1.0)
+INCLIB += $(shell pkg-config --cflags --libs libmongoc-1.0)
 INCLIB += $(shell pkg-config --cflags fuse)
 
 #---------------------------------------------------------
 # Compiler & linker flags
 #---------------------------------------------------------
 
-CXXFLAGS = -Wall -Werror -g -std=c++14 -D_FILE_OFFSET_BITS=64
 LDFLAGS = -g
-LDFLAGS += $(shell pkg-config --libs libmongoc-1.0)
-LDFLAGS += $(shell pkg-config --libs libbson-1.0)
+LDFLAGS += $(shell pkg-config --libs --cflags libmongoc-1.0)
+LDFLAGS += $(shell pkg-config --libs --cflags libbson-1.0)
 LDFLAGS += $(shell pkg-config --libs fuse)
 INCLUDES = $(INCLIB)
 #---------------------------------------------------------
@@ -24,7 +27,7 @@ INCLUDES = $(INCLIB)
 all: $(BINS)
 
 $(BINS): $(OBJS)
-	$(CC) -o $@ $(LDFLAGS) $<
+	$(CC) -o $@ $< $(LDFLAGS)
 
 $(OBJS): $(SRCS)
 	$(CC) $(INCLUDES) -c $< -o $@
