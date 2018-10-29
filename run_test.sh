@@ -1,8 +1,12 @@
 #! /bin/bash
 
 DESTDIR=/mnt/mongodb
+
+echo "cleaning up"
+test -f core && rm -f core
+
 echo "building"
-make clean all
+make all
 if [ $? -ne 0 ];  then
     echo "Building broken"
     exit 1
@@ -27,5 +31,11 @@ sleep 1
 kill -TERM %1
 echo "umounting $DESTDIR"
 sudo umount $DESTDIR
+if [ -f core ];then
+    echo "core dump found"
+    uid=$(id -u)
+    gid=$(id -g)
+    sudo chown $uid:$gid core
+fi
 
 
