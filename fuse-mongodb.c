@@ -191,11 +191,15 @@ static void mongodb_init() {
         printf ("%s\n", bson_error.message);
     }
 
+}
+
+static void mongo_session_destroy() {
+    syslog(LOG_NOTICE, "mongo_session_destroy() called");
+
     syslog(LOG_NOTICE, " * mongo and BSON destroying");
     bson_destroy (bson_doc);
     mongoc_collection_destroy (mongo_collection);
     mongoc_client_destroy (mongo_client);
-
 }
 
 static struct fuse_lowlevel_ops hello_ll_oper = {
@@ -227,6 +231,7 @@ int main(int argc, char *argv[]){
 				fuse_remove_signal_handlers(se);
 				fuse_session_remove_chan(ch);
 			}
+			mongo_session_destroy();
 			fuse_session_destroy(se);
 		}
 		fuse_unmount(mountpoint, ch);
