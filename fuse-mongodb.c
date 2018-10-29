@@ -187,7 +187,7 @@ static void mongodb_init() {
     BSON_APPEND_UTF8 (bson_doc, "hello", "world");
 
     syslog(LOG_NOTICE, " * inserting BSON doc into mongo collection");
-    if (!mongoc_collection_insert (mongo_collection, MONGOC_INSERT_NONE, bson_doc, NULL, &bson_error)) {
+    if (!mongoc_collection_insert(mongo_collection, MONGOC_INSERT_NONE, bson_doc, NULL, &bson_error)) {
         printf ("%s\n", bson_error.message);
     }
 
@@ -212,7 +212,7 @@ static struct fuse_lowlevel_ops hello_ll_oper = {
 };
 
 int main(int argc, char *argv[]){
-    syslog(LOG_NOTICE, "main() called");
+    syslog(LOG_NOTICE, " ### main() called ###");
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 	struct fuse_chan *ch;
 	char *mountpoint;
@@ -237,6 +237,6 @@ int main(int argc, char *argv[]){
 		fuse_unmount(mountpoint, ch);
 	}
 	fuse_opt_free_args(&args);
-
+    syslog(LOG_NOTICE, " fuse exiting...  (error=%d)", err);
 	return err ? 1 : 0;
 }
