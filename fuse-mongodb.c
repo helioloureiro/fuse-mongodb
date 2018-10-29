@@ -25,13 +25,32 @@
 #include <unistd.h>
 #include <assert.h>
 #include <syslog.h>
+#include <time.h>
+
+/* mongoc */
+#include <bson.h>
+#include <mongoc.h>
+
 
 static const char *hello_str = "Hello World!\n";
 static const char *hello_name = "hello";
+static const char *mongodb_settings = "mongodb://100.109.0.1:27017/testdb";
+static mongoc_client_t *mongo_client;
+static mongoc_collection_t *mongo_collection;
+static mongoc_cursor_t *mongo_cursor;
+static bson_error_t bson_error;
+static bson_oid_t bson_oid;
+static bson_t *bson_doc;
+
 
 static int hello_stat(fuse_ino_t ino, struct stat *stbuf){
     syslog(LOG_NOTICE, "hello_stat() called");
+    syslog(LOG_NOTICE, " * hello_stat() ino=%d", (int) ino);
 	stbuf->st_ino = ino;
+    stbuf->st_uid = getuid();
+    stbuf->st_gid = getgid();
+    stbuf->st_atime = stbuf->st_mtime = time(NULL);
+
 	switch (ino) {
 	case 1:
 		stbuf->st_mode = S_IFDIR | 0755;
@@ -150,7 +169,37 @@ static void hello_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size,
 	reply_buf_limited(req, hello_str, strlen(hello_str), off, size);
 }
 
+static void mongodb_init() {
+    syslog(LOG_NOTICE, "mongodb_init() called");
+
+
+    syslog(LOG_NOTICE, " * mongoc_init() called");
+    mongoc_init();
+
+    syslog(LOG_NOTICE, " * connection into mongo collection via client");
+    mongo_client = mongoc_client_new (mongodb_settings);
+    mongo_collection = mongoc_client_get_collection (mongo_client, "test", "test");
+
+    syslog(LOG_NOTICE, " * creating new BSON doc");
+    bson_doc = bson_new ();
+    bson_oid_init (&bson_oid, NULL);
+    BSON_APPEND_OID (bson_doc, "_id", &bson_oid);
+    BSON_APPEND_UTF8 (bson_doc, "hello", "world");
+
+    syslog(LOG_NOTICE, " * inserting BSON doc into mongo collection");
+    if (!mongoc_collection_insert (mongo_collection, MONGOC_INSERT_NONE, bson_doc, NULL, &bson_error)) {
+        printf ("%s\n", bson_error.message);
+    }
+
+    syslog(LOG_NOTICE, " * mongo and BSON destroying");
+    bson_destroy (bson_doc);
+    mongoc_collection_destroy (mongo_collection);
+    mongoc_client_destroy (mongo_client);
+
+}
+
 static struct fuse_lowlevel_ops hello_ll_oper = {
+    .init       = mongodb_init,
 	.lookup		= hello_ll_lookup,
 	.getattr	= hello_ll_getattr,
 	.readdir	= hello_ll_readdir,
