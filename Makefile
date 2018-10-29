@@ -1,31 +1,33 @@
-PGM = fuse-mongodb
+BINS = fuse-mongodb mongo-example
 
-OBJS =  fuse-mongodb.o
+OBJS = fuse-mongodb.o mongo-example.o
+SRCS = fuse-mongodb.c mongo-example.c
 
-INCLIB = -I../libfuse/include
 INCLIB += $(shell pkg-config --cflags libbson-1.0)
+INCLIB += $(shell pkg-config --cflags libmongoc-1.0)
+INCLIB += $(shell pkg-config --cflags fuse)
 
 #---------------------------------------------------------
 # Compiler & linker flags
 #---------------------------------------------------------
 
 CXXFLAGS = -Wall -Werror -g -std=c++14 -D_FILE_OFFSET_BITS=64
-LDFLAGS = -lfuse3 -g
+LDFLAGS = -g
 LDFLAGS += $(shell pkg-config --libs libmongoc-1.0)
 LDFLAGS += $(shell pkg-config --libs libbson-1.0)
-LDFLAGS += -L../libfuse/build/lib
+LDFLAGS += $(shell pkg-config --libs fuse)
 INCLUDES = $(INCLIB)
 #---------------------------------------------------------
 # Explicit targets
 #---------------------------------------------------------
 
-all: $(PGM)
+all: $(BINS)
 
-$(PGM): $(OBJS) $(PGM).c
-	$(CC) -o $@ $(OBJS) $(LDFLAGS)
+$(BINS): $(OBJS)
+	$(CC) -o $@ $(LDFLAGS) $<
 
-$(OBJS): %.c:
-	$(CC) $(INCLUDES) -c $(PGM).c $< -o $@
+$(OBJS): $(SRCS)
+	$(CC) $(INCLUDES) -c $< -o $@
 
 .PHONY: clean
 clean:
