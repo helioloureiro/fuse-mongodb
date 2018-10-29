@@ -50,6 +50,7 @@ static int hello_stat(fuse_ino_t ino, struct stat *stbuf){
     stbuf->st_uid = getuid();
     stbuf->st_gid = getgid();
     stbuf->st_atime = stbuf->st_mtime = time(NULL);
+    syslog(LOG_NOTICE, " * hello_stat() st_dev=%d", (int) stbuf->st_dev);
 
 	switch (ino) {
 	case 1:
@@ -58,7 +59,7 @@ static int hello_stat(fuse_ino_t ino, struct stat *stbuf){
 		break;
 
 	case 2:
-		stbuf->st_mode = S_IFREG | 0444;
+		stbuf->st_mode = S_IFREG | 0644;
 		stbuf->st_nlink = 1;
 		stbuf->st_size = strlen(hello_str);
 		break;
@@ -107,11 +108,13 @@ struct dirbuf {
 
 static void dirbuf_add(fuse_req_t req, struct dirbuf *b, const char *name,
 		       fuse_ino_t ino){
-    syslog(LOG_NOTICE, "dirbuf_add() called");
+    syslog(LOG_NOTICE, "dirbuf_add() called for %s", name);
+    syslog(LOG_NOTICE, " * dirbuf_add() ino=%d", (int) ino);
 	struct stat stbuf;
 	size_t oldsize = b->size;
 	b->size += fuse_add_direntry(req, NULL, 0, name, NULL, 0);
 	b->p = (char *) realloc(b->p, b->size);
+    syslog(LOG_NOTICE, " * dirbuf_add() b->p=%l",(long) b->p);
 	memset(&stbuf, 0, sizeof(stbuf));
 	stbuf.st_ino = ino;
 	fuse_add_direntry(req, b->p + oldsize, b->size - oldsize, name, &stbuf,
@@ -135,14 +138,30 @@ static void hello_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     syslog(LOG_NOTICE, "hello_ll_readdir() called");
 	(void) fi;
 
+    syslog(LOG_NOTICE, " * hello_ll_readdir() ino=%d", (int) ino);
 	if (ino != 1)
 		fuse_reply_err(req, ENOTDIR);
 	else {
 		struct dirbuf b;
+        char *str;
+        bson_t *query;
 
 		memset(&b, 0, sizeof(b));
 		dirbuf_add(req, &b, ".", 1);
 		dirbuf_add(req, &b, "..", 1);
+
+        query = bson_new();
+        BSON_APPEND_UTF8(query, "hello", "world");
+
+        mongo_cursor = mongoc_collection_find (mongo_collection, MONGOC_QUERY_NONE, 0, 0, 0, query, NULL, NULL);
+
+        while (mongoc_cursor_next (mongo_cursor, &bson_doc)) {
+            str = bson_as_json(bson_doc, NULL);
+            syslog(LOG_NOTICE, "str=%s", str);
+            //dirbuf_add(req, &b, str, 2);
+            bson_free(str);
+        }
+
 		dirbuf_add(req, &b, hello_name, 2);
 		reply_buf_limited(req, b.p, b.size, off, size);
 		free(b.p);
@@ -178,13 +197,21 @@ static void mongodb_init() {
 
     syslog(LOG_NOTICE, " * connection into mongo collection via client");
     mongo_client = mongoc_client_new (mongodb_settings);
-    mongo_collection = mongoc_client_get_collection (mongo_client, "test", "test");
+    mongo_collection = mongoc_client_get_collection (mongo_client, "testdb", "testdb");
 
     syslog(LOG_NOTICE, " * creating new BSON doc");
     bson_doc = bson_new ();
-    bson_oid_init (&bson_oid, NULL);
-    BSON_APPEND_OID (bson_doc, "_id", &bson_oid);
-    BSON_APPEND_UTF8 (bson_doc, "hello", "world");
+    bson_oid_init(&bson_oid, NULL);
+    syslog(LOG_NOTICE, " * BSON oid=%x", &bson_oid);
+    BSON_APPEND_OID(bson_doc, "_id", &bson_oid);
+
+    char *filename = "/mnt/mongodb/myfile";
+    char *random;
+    sprintf(random, "%d", rand());
+    strcat(filename, random);
+    syslog(LOG_NOTICE, " * filename=%s", filename);
+
+    BSON_APPEND_UTF8(bson_doc, "hello", "world");
 
     syslog(LOG_NOTICE, " * inserting BSON doc into mongo collection");
     if (!mongoc_collection_insert(mongo_collection, MONGOC_INSERT_NONE, bson_doc, NULL, &bson_error)) {
