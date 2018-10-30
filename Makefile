@@ -26,11 +26,14 @@ INCLUDES = $(INCLIB)
 
 all: $(BINS)
 
-$(BINS): $(OBJS)
+fuse-mongodb: fuse-mongodb.o
 	$(CC) -o $@ $< $(LDFLAGS)
 
-$(OBJS): $(SRCS)
-	$(CC) $(INCLUDES) -c $< -o $@
+mongo-example: mongo-example.o
+	$(CC) -o $@ $< $(LDFLAGS)
+
+%.o: %.c
+	@$(CC) $(INCLUDES) -c $< -o $@
 
 .PHONY: clean
 clean:
