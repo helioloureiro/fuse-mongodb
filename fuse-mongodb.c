@@ -114,7 +114,7 @@ static void dirbuf_add(fuse_req_t req, struct dirbuf *b, const char *name,
 	size_t oldsize = b->size;
 	b->size += fuse_add_direntry(req, NULL, 0, name, NULL, 0);
 	b->p = (char *) realloc(b->p, b->size);
-    syslog(LOG_NOTICE, " * dirbuf_add() b->p=%l",(long) b->p);
+    syslog(LOG_NOTICE, " * dirbuf_add() b->p=%p", b->p);
 	memset(&stbuf, 0, sizeof(stbuf));
 	stbuf.st_ino = ino;
 	fuse_add_direntry(req, b->p + oldsize, b->size - oldsize, name, &stbuf,
@@ -202,7 +202,7 @@ static void mongodb_init() {
     syslog(LOG_NOTICE, " * creating new BSON doc");
     bson_doc = bson_new ();
     bson_oid_init(&bson_oid, NULL);
-    syslog(LOG_NOTICE, " * BSON oid=%x", &bson_oid);
+    syslog(LOG_NOTICE, " * BSON oid=%p", &bson_oid);
     BSON_APPEND_OID(bson_doc, "_id", &bson_oid);
 
     char *filename = "/mnt/mongodb/myfile";
