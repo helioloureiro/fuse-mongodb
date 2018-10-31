@@ -31,6 +31,9 @@
 #include <bson.h>
 #include <mongoc.h>
 
+/*** extra ***/
+#include <sys/param.h>
+
 
 static const char *hello_str = "Hello World!\n";
 static const char *hello_name = "hello";
@@ -144,6 +147,7 @@ static void hello_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 	else {
 		struct dirbuf b;
         char *str;
+
         bson_t *query;
 
 		memset(&b, 0, sizeof(b));
@@ -152,15 +156,18 @@ static void hello_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 
         query = bson_new();
         BSON_APPEND_UTF8(query, "hello", "world");
+        query = BCON_NEW("$query", "{", "foo", BCON_INT32(1), "}"); //,
+        //                 "$orderby :" "{", "foo", BCON_INT32(-1), "}");
 
         mongo_cursor = mongoc_collection_find (mongo_collection, MONGOC_QUERY_NONE, 0, 0, 0, query, NULL, NULL);
 
-        while (mongoc_cursor_next (mongo_cursor, &bson_doc)) {
+        while (mongoc_cursor_next (mongo_cursor, (const bson_t**) &bson_doc)) {
             str = bson_as_json(bson_doc, NULL);
             syslog(LOG_NOTICE, "str=%s", str);
-            //dirbuf_add(req, &b, str, 2);
+            dirbuf_add(req, &b, str, 2);
             bson_free(str);
         }
+        bson_destroy(query);
 
 		dirbuf_add(req, &b, hello_name, 2);
 		reply_buf_limited(req, b.p, b.size, off, size);
@@ -205,18 +212,28 @@ static void mongodb_init() {
     syslog(LOG_NOTICE, " * BSON oid=%p", &bson_oid);
     BSON_APPEND_OID(bson_doc, "_id", &bson_oid);
 
-    char *filename = "/mnt/mongodb/myfile";
-    char *random;
-    sprintf(random, "%d", rand());
-    strcat(filename, random);
-    syslog(LOG_NOTICE, " * filename=%s", filename);
 
-    BSON_APPEND_UTF8(bson_doc, "hello", "world");
+
+    const char *filepath = "/mnt/mongodb/myfile";
+    char *random;
+    char *filename;
+    filename = malloc(sizeof(PATH_MAX));
+    if (filename == NULL) {
+        printf("Failed to allocate memory\n");
+    }
+    sprintf(filename, "%s-%d", filepath, rand());
+    syslog(LOG_NOTICE, " * filename=%s", filename);
+    BSON_APPEND_UTF8(bson_doc, "filename", filename);
+    BSON_APPEND_UTF8(bson_doc, "content", "hello world");
 
     syslog(LOG_NOTICE, " * inserting BSON doc into mongo collection");
+
     if (!mongoc_collection_insert(mongo_collection, MONGOC_INSERT_NONE, bson_doc, NULL, &bson_error)) {
         printf ("%s\n", bson_error.message);
     }
+
+    free(filename);
+    syslog(LOG_NOTICE, "mongodb_init() ends here");
 
 }
 
@@ -224,7 +241,7 @@ static void mongo_session_destroy() {
     syslog(LOG_NOTICE, "mongo_session_destroy() called");
 
     syslog(LOG_NOTICE, " * mongo and BSON destroying");
-    bson_destroy (bson_doc);
+    //bson_destroy(bson_doc);
     mongoc_collection_destroy (mongo_collection);
     mongoc_client_destroy (mongo_client);
 }
