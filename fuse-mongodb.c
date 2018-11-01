@@ -154,20 +154,20 @@ static void hello_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 		dirbuf_add(req, &b, ".", 1);
 		dirbuf_add(req, &b, "..", 1);
 
-        query = bson_new();
-        BSON_APPEND_UTF8(query, "hello", "world");
+        //query = bson_new();
+        //BSON_APPEND_UTF8(query, "hello", "world");
         query = BCON_NEW("$query", "{", "foo", BCON_INT32(1), "}"); //,
         //                 "$orderby :" "{", "foo", BCON_INT32(-1), "}");
 
         mongo_cursor = mongoc_collection_find (mongo_collection, MONGOC_QUERY_NONE, 0, 0, 0, query, NULL, NULL);
 
-        while (mongoc_cursor_next (mongo_cursor, (const bson_t**) &bson_doc)) {
-            str = bson_as_json(bson_doc, NULL);
+        while (mongoc_cursor_next (mongo_cursor, (const bson_t**) &query)) {
+            str = bson_as_json(query, NULL);
             syslog(LOG_NOTICE, "str=%s", str);
             dirbuf_add(req, &b, str, 2);
             bson_free(str);
         }
-        bson_destroy(query);
+        //bson_destroy(query);
 
 		dirbuf_add(req, &b, hello_name, 2);
 		reply_buf_limited(req, b.p, b.size, off, size);
@@ -204,7 +204,7 @@ static void mongodb_init() {
 
     syslog(LOG_NOTICE, " * connection into mongo collection via client");
     mongo_client = mongoc_client_new (mongodb_settings);
-    mongo_collection = mongoc_client_get_collection (mongo_client, "testdb", "testdb");
+    mongo_collection = mongoc_client_get_collection (mongo_client, "testdb", "xfs");
 
     syslog(LOG_NOTICE, " * creating new BSON doc");
     bson_doc = bson_new ();
@@ -215,13 +215,15 @@ static void mongodb_init() {
 
 
     const char *filepath = "/mnt/mongodb/myfile";
-    char *random;
     char *filename;
+    time_t now = time(NULL);
+    int rand_idx = rand_r((unsigned int *) &now);
+    syslog(LOG_NOTICE, "random=%d", rand_idx);
     filename = malloc(sizeof(PATH_MAX));
     if (filename == NULL) {
         printf("Failed to allocate memory\n");
     }
-    sprintf(filename, "%s-%d", filepath, rand());
+    sprintf(filename, "%s-%d", filepath, rand_idx);
     syslog(LOG_NOTICE, " * filename=%s", filename);
     BSON_APPEND_UTF8(bson_doc, "filename", filename);
     BSON_APPEND_UTF8(bson_doc, "content", "hello world");
