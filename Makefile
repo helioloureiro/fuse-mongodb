@@ -19,7 +19,7 @@ LDFLAGS = -g
 LDFLAGS += $(shell pkg-config --libs --cflags libmongoc-1.0)
 LDFLAGS += $(shell pkg-config --libs --cflags libbson-1.0)
 LDFLAGS += $(shell pkg-config --libs fuse)
-INCLUDES = $(INCLIB)
+INCLUDES = $(INCLIB) -g
 #---------------------------------------------------------
 # Explicit targets
 #---------------------------------------------------------
