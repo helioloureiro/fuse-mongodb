@@ -81,10 +81,13 @@ static void hello_ll_getattr(fuse_req_t req, fuse_ino_t ino,
 	(void) fi;
 
 	memset(&stbuf, 0, sizeof(stbuf));
-	if (hello_stat(ino, &stbuf) == -1)
+	if (hello_stat(ino, &stbuf) == -1) {
+        syslog(LOG_NOTICE, " * hello_ll_getattr() returning error");
 		fuse_reply_err(req, ENOENT);
-	else
+    } else {
+        syslog(LOG_NOTICE, " * hello_ll_getattr() returning attribute");
 		fuse_reply_attr(req, &stbuf, 1.0);
+    }
 }
 
 static void hello_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name){
@@ -223,7 +226,7 @@ static void mongodb_init() {
     if (filename == NULL) {
         printf("Failed to allocate memory\n");
     }
-    sprintf(filename, "%s-%d", filepath, rand_idx);
+    sprintf(filename, "%s-%d.txt", filepath, rand_idx);
     syslog(LOG_NOTICE, " * filename=%s", filename);
     BSON_APPEND_UTF8(bson_doc, "filename", filename);
     BSON_APPEND_UTF8(bson_doc, "content", "hello world");
@@ -248,6 +251,12 @@ static void mongo_session_destroy() {
     mongoc_client_destroy (mongo_client);
 }
 
+static void mongo_access(fuse_req_t req, fuse_ino_t ino, int mask){
+    syslog(LOG_NOTICE, "mongo_mongo_access() called");
+
+}
+
+
 static struct fuse_lowlevel_ops hello_ll_oper = {
     .init       = mongodb_init,
 	.lookup		= hello_ll_lookup,
@@ -255,6 +264,7 @@ static struct fuse_lowlevel_ops hello_ll_oper = {
 	.readdir	= hello_ll_readdir,
 	.open		= hello_ll_open,
 	.read		= hello_ll_read,
+    .access     = mongo_access,
 };
 
 int main(int argc, char *argv[]){
