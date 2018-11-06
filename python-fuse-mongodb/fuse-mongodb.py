@@ -103,6 +103,7 @@ class MongoDB:
         syslog.syslog(syslog.LOG_NOTICE, "MongoDB.__init__() ends")
 
     def list_files(self, directory=None):
+        syslog.syslog(syslog.LOG_NOTICE, "MongoDB.list_files()")
         filenames = []
         for content in self.xfs.find():
             filepath = content['filename']
@@ -112,6 +113,8 @@ class MongoDB:
         return filenames
 
     def insert_file(self, filename, content):
+        syslog.syslog(syslog.LOG_NOTICE, "MongoDB.insert_file()")
+        syslog.syslog(syslog.LOG_NOTICE, " * filename=%s" % filename)
         json = {
             "filename" : filename,
             "content" : content,
@@ -120,6 +123,7 @@ class MongoDB:
         self.xfs.insert_one(json)
 
     def test_insert_db(self):
+        syslog.syslog(syslog.LOG_NOTICE, "MongoDB.test_insert_db()")
         filename = "myfile-%d.txt" % random.randint(0,99999)
         m = mipsum.MussumLorum()
         text = "\n\n".join(m.get_paragraph())
@@ -128,24 +132,29 @@ class MongoDB:
                 "date": datetime.datetime.utcnow()}
 
         post_id = self.xfs.insert_one(post)
-        print("post_id:", post_id)
+        syslog.syslog(syslog.LOG_NOTICE, " test_insert_db(): post_id=%s" % post_id)
         return filename
 
     def search_db(self, filename):
+        syslog.syslog(syslog.LOG_NOTICE, "MongoDB.search_db()")
+        syslog.syslog(syslog.LOG_NOTICE, " * filename=%s" % filename)
         return self.xfs.find({ "filename" : filename })
 
     def test_delete_db(self, filename):
+        syslog.syslog(syslog.LOG_NOTICE, "MongoDB.test_delete_db()")
+        syslog.syslog(syslog.LOG_NOTICE, " * filename=%s" % filename)
         for entry in self.xfs.find({ "filename" : filename }):
             self.xfs.delete_one(entry)
 
     def test_populate_db(self):
-        print("populating data")
+        syslog.syslog(syslog.LOG_NOTICE, "MongoDB.test_populate_db()")
         counter = 10
         while counter > 0:
             self.test_insert_db()
             counter -= 1
 
     def test(self, directory=None):
+        syslog.syslog(syslog.LOG_NOTICE, "MongoDB.test()")
         syslog.syslog(syslog.LOG_NOTICE, "MongoDB.__init__()")
         # insert
         print("inserting file...")
@@ -171,6 +180,8 @@ class MongoDB:
 
 class MyStat(fuse.Stat):
     def __init__(self):
+        syslog.syslog(syslog.LOG_NOTICE, "MyStat.__init__()")
+        now = int(time.time())
         self.st_mode = 0
         self.st_ino = 0
         self.st_dev = 0
@@ -178,9 +189,9 @@ class MyStat(fuse.Stat):
         self.st_uid = 0
         self.st_gid = 0
         self.st_size = 0
-        self.st_atime = 0
-        self.st_mtime = 0
-        self.st_ctime = 0
+        self.st_atime = now
+        self.st_mtime = now
+        self.st_ctime = now
 
 
 class FiocFS(Fuse):
@@ -192,6 +203,12 @@ class FiocFS(Fuse):
         self.mongo_files = self.mongo.list_files()
         self.buf =  ""
         syslog.syslog(syslog.LOG_NOTICE, "FiocFS.__init__() ends")
+
+    def is_mongo(self, path):
+        filename = path[1:]
+        if filename in self.mongo_files:
+            return True
+        return False
 
     def resize(self, new_size):
         syslog.syslog(syslog.LOG_NOTICE, "FiocFS.resize()")
@@ -209,21 +226,43 @@ class FiocFS(Fuse):
     def file_type(self, path):
         syslog.syslog(syslog.LOG_NOTICE, "FiocFS.file_type()")
         syslog.syslog(syslog.LOG_NOTICE, " * path=%s" % path)
-        if path[1:] in self.mongo_files:
-            syslog.syslog(syslog.LOG_NOTICE, " * FIOC_MONGO")
+        if self.is_mongo(path):
+            syslog.syslog(syslog.LOG_NOTICE, " * file_type(): FIOC_MONGO")
             return FIOC_MONGO
         if not type(path) == str:
-            syslog.syslog(syslog.LOG_NOTICE, " * FIOC_ROOT")
+            syslog.syslog(syslog.LOG_NOTICE, " * file_type(): FIOC_ROOT")
             return FIOC_NONE
         if path == "/":
-            syslog.syslog(syslog.LOG_NOTICE, " * FIOC_ROOT")
+            syslog.syslog(syslog.LOG_NOTICE, " * file_type(): FIOC_ROOT")
             return FIOC_ROOT
         elif path == "/" + FIOC_NAME:
-            syslog.syslog(syslog.LOG_NOTICE, " * FIOC_FILE")
+            syslog.syslog(syslog.LOG_NOTICE, " * file_type(): FIOC_FILE")
             return FIOC_FILE
         else:
-            syslog.syslog(syslog.LOG_NOTICE, " * FIOC_NONE")
+            syslog.syslog(syslog.LOG_NOTICE, " * file_type(): FIOC_NONE")
             return FIOC_NONE
+
+    def get_mongo_size(self, path):
+        syslog.syslog(syslog.LOG_NOTICE, "FiocFS.get_mongo_size()")
+        filename = path[1:] # removes the "/" at the beginning
+        syslog.syslog(syslog.LOG_NOTICE, " * get_mongo_size(): filename=%s" % filename)
+        obj = self.mongo.search_db(filename)[0]
+        sizeof = len(obj['content'])
+        del obj
+        syslog.syslog(syslog.LOG_NOTICE, " * get_mongo_size(): sizeof=%d" % sizeof)
+        return sizeof
+
+    def get_mongo_ctime(self, path):
+        syslog.syslog(syslog.LOG_NOTICE, "FiocFS.get_mongo_get_mongo_ctime()")
+        filename = path[1:] # removes the "/" at the beginning
+        syslog.syslog(syslog.LOG_NOTICE, " * get_mongo_get_mongo_ctime(): filename=%s" % filename)
+        obj = self.mongo.search_db(filename)[0]
+        dtime = obj['date']
+        (syslog.LOG_NOTICE, " * get_mongo_ctime(): dtime=%s" % dtime)
+        ctime = int(dtime.timestamp())
+        del obj
+        syslog.syslog(syslog.LOG_NOTICE, " * get_mongo_ctime(): ctime=%d" % ctime)
+        return ctime
 
     def getattr(self, path):
         syslog.syslog(syslog.LOG_NOTICE, "FiocFS.getattr()")
@@ -231,20 +270,24 @@ class FiocFS(Fuse):
         st = MyStat()
         ft = self.file_type(path)
         if ft == FIOC_ROOT:
-            syslog.syslog(syslog.LOG_NOTICE, " * FIOC_ROOT")
+            syslog.syslog(syslog.LOG_NOTICE, " * getattr(): FIOC_ROOT")
             st.st_mode = stat.S_IFDIR | 0o755
             st.st_nlink = 2
         elif ft == FIOC_FILE:
-            syslog.syslog(syslog.LOG_NOTICE, " * FIOC_FILE")
+            syslog.syslog(syslog.LOG_NOTICE, " * getattr(): FIOC_FILE")
             st.st_mode = stat.S_IFREG | 0o666
             st.st_nlink = 1
             st.st_size = len(self.buf)
         elif ft == FIOC_MONGO:
-            syslog.syslog(syslog.LOG_NOTICE, " * FIOC_MONGO")
+            syslog.syslog(syslog.LOG_NOTICE, " * getattr(): FIOC_MONGO")
             st.st_mode = stat.S_IFREG | 0o666
             st.st_nlink = 1
-            st.st_size = len(self.buf)
-
+            st_size = self.get_mongo_size(path)
+            syslog.syslog(syslog.LOG_NOTICE, " * * getattr() size=%d" % st_size)
+            st.st_size = st_size
+            st_ctime = self.get_mongo_ctime(path)
+            syslog.syslog(syslog.LOG_NOTICE, " * * getattr() st_ctime=%d" % st_ctime)
+            st.st_ctime = st_ctime
         else:
             syslog.syslog(syslog.LOG_NOTICE, " * ENOENT")
             return -errno.ENOENT
@@ -253,12 +296,32 @@ class FiocFS(Fuse):
     def open(self, path, flags):
         syslog.syslog(syslog.LOG_NOTICE, "FiocFS.open()")
         if self.file_type(path) != FIOC_NONE:
+            syslog.syslog(syslog.LOG_NOTICE, " * returning 0")
             return 0
 
+        syslog.syslog(syslog.LOG_NOTICE, " * returning ENOENT")
         return -errno.ENOENT
+
+    def mongo_do_read(self, path):
+        syslog.syslog(syslog.LOG_NOTICE, "FiocFS.mongo_do_read()")
+        filename = path[1:]
+        syslog.syslog(syslog.LOG_NOTICE, " * mongo_do_read(): filename=%s" % filename)
+        obj = self.mongo.search_db(filename)[0]
+        content = obj['content']
+        syslog.syslog(syslog.LOG_NOTICE, " * mongo_do_read(): first_line=%s" % content.split("\n")[0])
+        del obj
+        return content
+
 
     def do_read(self, path, size, offset):
         syslog.syslog(syslog.LOG_NOTICE, "FiocFS.do_read()")
+        syslog.syslog(syslog.LOG_NOTICE, " * path=%s" % path)
+        syslog.syslog(syslog.LOG_NOTICE, " * size=%d" % size)
+        syslog.syslog(syslog.LOG_NOTICE, " * offset=%d" % offset)
+
+        if self.is_mongo(path):
+            sizeof = self.get_mongo_size(path)
+            self.buf = self.mongo_do_read(path)
 
         if offset >= len(self.buf):
             return 0
@@ -270,18 +333,34 @@ class FiocFS(Fuse):
 
     def read(self, path, size, offset):
         syslog.syslog(syslog.LOG_NOTICE, "FiocFS.read()")
-        if self.file_type(path) != FIOC_FILE:
+        syslog.syslog(syslog.LOG_NOTICE, " * path=%s" % path)
+        syslog.syslog(syslog.LOG_NOTICE, " * size=%d" % size)
+        syslog.syslog(syslog.LOG_NOTICE, " * offset=%d" % offset)
+
+        if self.file_type(path) == FIOC_MONGO:
+            syslog.syslog(syslog.LOG_NOTICE, " * read(): file_type(path) is FIOC_MONGO")
+            pass
+        elif self.file_type(path) != FIOC_FILE:
+            syslog.syslog(syslog.LOG_NOTICE, " * * returns EINVAL")
             return -errno.EINVAL;
 
         return self.do_read(path, size, offset)
 
     def do_write(self, path, buf, offset):
         syslog.syslog(syslog.LOG_NOTICE, "FiocFS.do_write()")
+        syslog.syslog(syslog.LOG_NOTICE, " * path=%s" % path)
+        syslog.syslog(syslog.LOG_NOTICE, " * size=%d" % size)
+        syslog.syslog(syslog.LOG_NOTICE, " * offset=%d" % offset)
+
         self.buf = self.buf[0:offset-1] + buf + self.buf[offset+len(buf)+1:len(self.buf)]
         return len(buf)
 
     def write(self, path, buf, offset):
         syslog.syslog(syslog.LOG_NOTICE, "FiocFS.write()")
+        syslog.syslog(syslog.LOG_NOTICE, " * path=%s" % path)
+        syslog.syslog(syslog.LOG_NOTICE, " * size=%d" % size)
+        syslog.syslog(syslog.LOG_NOTICE, " * offset=%d" % offset)
+
         if self.file_type(path) != FIOC_FILE:
             return -errno.EINVAL;
 
@@ -289,6 +368,9 @@ class FiocFS(Fuse):
 
     def truncate(self, path, size):
         syslog.syslog(syslog.LOG_NOTICE, "FiocFS.truncate()")
+        syslog.syslog(syslog.LOG_NOTICE, " * path=%s" % path)
+        syslog.syslog(syslog.LOG_NOTICE, " * size=%d" % size)
+
         if self.file_type(path) != FIOC_FILE:
             return -error.EINVAL
 
@@ -296,6 +378,9 @@ class FiocFS(Fuse):
 
     def readdir(self, path, offset):
         syslog.syslog(syslog.LOG_NOTICE, "FiocFS.readdir()")
+        syslog.syslog(syslog.LOG_NOTICE, " * path=%s" % path)
+        syslog.syslog(syslog.LOG_NOTICE, " * offset=%d" % offset)
+
         for r in  '.', '..', FIOC_NAME:
             syslog.syslog(syslog.LOG_NOTICE, " * fuse.Direntry(): %s" % r)
             yield fuse.Direntry(r)
@@ -306,6 +391,11 @@ class FiocFS(Fuse):
 
     def ioctl(self, path, cmd, arg, flags):
         syslog.syslog(syslog.LOG_NOTICE, "FiocFS.ioctl()")
+        syslog.syslog(syslog.LOG_NOTICE, " * path=%s" % path)
+        syslog.syslog(syslog.LOG_NOTICE, " * cmd=%d" % cmd)
+        syslog.syslog(syslog.LOG_NOTICE, " * arg=%s" % arg)
+        syslog.syslog(syslog.LOG_NOTICE, " * flags=%d" % flags)
+
         if cmd == FIOC_GET_SIZE:
             data = struct.pack("L",len(self.buf))
             return data
