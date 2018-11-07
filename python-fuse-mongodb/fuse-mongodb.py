@@ -13,6 +13,10 @@ import sys
 import random
 import time, datetime
 import mipsum
+from errno import *
+from stat import *
+import fcntl
+
 
 try:
     import _find_fuse_parts
@@ -25,6 +29,21 @@ if not hasattr(fuse, '__version__'):
     raise RuntimeError("your fuse-py doesn't know of fuse.__version__, probably it's too old.")
 
 fuse.fuse_python_api = (0, 2)
+
+fuse.feature_assert('stateful_files', 'has_init')
+
+def debug(message):
+    syslog.syslog(syslog.LOG_NOTICE, message)
+
+def flag2mode(flags):
+    md = {os.O_RDONLY: 'r', os.O_WRONLY: 'w', os.O_RDWR: 'w+'}
+    m = md[flags & (os.O_RDONLY | os.O_WRONLY | os.O_RDWR)]
+
+    if flags | os.O_APPEND:
+        m = m.replace('w', 'a', 1)
+
+    return m
+
 
 # this mimics asm-generic/ioctl.h  header
 # I'm not sure this is really portable, you'd better use ioctl-opt package or something similar
@@ -178,6 +197,98 @@ class MongoDB:
         print(" * filename=%s removed" % filename)
 
 
+class XmpFile(object):
+
+    def __init__(self, path, flags, *mode):
+        debug("XmpFile.__init__()")
+        self.file = os.fdopen(os.open("." + path, flags, *mode),
+                                flag2mode(flags))
+        self.fd = self.file.fileno()
+
+    def read(self, length, offset):
+        debug("XmpFile.read()")
+        self.file.seek(offset)
+        return self.file.read(length)
+
+    def write(self, buf, offset):
+        debug("XmpFile.write()")
+        self.file.seek(offset)
+        self.file.write(buf)
+        return len(buf)
+
+    def release(self, flags):
+        debug("XmpFile.release()")
+        self.file.close()
+
+    def _fflush(self):
+        debug("XmpFile._fflush()")
+        if 'w' in self.file.mode or 'a' in self.file.mode:
+            self.file.flush()
+
+    def fsync(self, isfsyncfile):
+        debug("XmpFile.fsync()")
+        self._fflush()
+        if isfsyncfile and hasattr(os, 'fdatasync'):
+            os.fdatasync(self.fd)
+        else:
+            os.fsync(self.fd)
+
+    def flush(self):
+        debug("XmpFile.flush()")
+        self._fflush()
+        # cf. xmp_flush() in fusexmp_fh.c
+        os.close(os.dup(self.fd))
+
+    def fgetattr(self):
+        debug("XmpFile.fgetattr()")
+        return os.fstat(self.fd)
+
+    def ftruncate(self, len):
+        debug("XmpFile.ftruncate()")
+        self.file.truncate(len)
+
+    def lock(self, cmd, owner, **kw):
+        debug("XmpFile.lock()")
+        # The code here is much rather just a demonstration of the locking
+        # API than something which actually was seen to be useful.
+
+        # Advisory file locking is pretty messy in Unix, and the Python
+        # interface to this doesn't make it better.
+        # We can't do fcntl(2)/F_GETLK from Python in a platfrom independent
+        # way. The following implementation *might* work under Linux.
+        #
+        # if cmd == fcntl.F_GETLK:
+        #     import struct
+        #
+        #     lockdata = struct.pack('hhQQi', kw['l_type'], os.SEEK_SET,
+        #                            kw['l_start'], kw['l_len'], kw['l_pid'])
+        #     ld2 = fcntl.fcntl(self.fd, fcntl.F_GETLK, lockdata)
+        #     flockfields = ('l_type', 'l_whence', 'l_start', 'l_len', 'l_pid')
+        #     uld2 = struct.unpack('hhQQi', ld2)
+        #     res = {}
+        #     for i in xrange(len(uld2)):
+        #          res[flockfields[i]] = uld2[i]
+        #
+        #     return fuse.Flock(**res)
+
+        # Convert fcntl-ish lock parameters to Python's weird
+        # lockf(3)/flock(2) medley locking API...
+        op = { fcntl.F_UNLCK : fcntl.LOCK_UN,
+                fcntl.F_RDLCK : fcntl.LOCK_SH,
+                fcntl.F_WRLCK : fcntl.LOCK_EX }[kw['l_type']]
+        if cmd == fcntl.F_GETLK:
+            return -EOPNOTSUPP
+        elif cmd == fcntl.F_SETLK:
+            if op != fcntl.LOCK_UN:
+                op |= fcntl.LOCK_NB
+        elif cmd == fcntl.F_SETLKW:
+            pass
+        else:
+            return -EINVAL
+
+        fcntl.lockf(self.fd, op, kw['l_start'], kw['l_len'])
+
+
 class MyStat(fuse.Stat):
     def __init__(self):
         syslog.syslog(syslog.LOG_NOTICE, "MyStat.__init__()")
@@ -288,9 +399,14 @@ class FiocFS(Fuse):
             st_ctime = self.get_mongo_ctime(path)
             syslog.syslog(syslog.LOG_NOTICE, " * * getattr() st_ctime=%d" % st_ctime)
             st.st_ctime = st_ctime
+            st.st_mtime = st_ctime
+        elif ft == FIOC_NONE:
+            syslog.syslog(syslog.LOG_NOTICE, " * getattr(): ENOENT")
+            return errno.ENOENT
         else:
-            syslog.syslog(syslog.LOG_NOTICE, " * ENOENT")
+            syslog.syslog(syslog.LOG_NOTICE, " * getattr(): -ENOENT")
             return -errno.ENOENT
+            #return 0
         return st
 
     def open(self, path, flags):
@@ -405,6 +521,16 @@ class FiocFS(Fuse):
             return 0
 
         return -errno.EINVAL
+
+    def access(self, *args, **kargs):
+        syslog.syslog(syslog.LOG_NOTICE, "FiocFS.access()")
+
+    def main(self, *a, **kw):
+        syslog.syslog(syslog.LOG_NOTICE, "FiocFS.main()")
+
+        self.file_class = XmpFile
+        return Fuse.main(self, *a, **kw)
+
 
 def main():
     syslog.syslog(syslog.LOG_NOTICE, "main()")
