@@ -11,20 +11,28 @@ alert() {
 
 alert "Mounting $TARGETDIR using fuse-mongodb."
 python3 ./fuse-mongodb.py $TARGETDIR
-
+response=$?
+if [[ $response -ne 0 ]]; then
+    alert "Fuse failed.  Stopping test."
+    exit $response
+fi
+sleep 1
 alert "Listing parent directory."
 ls -al $updir
+sleep 1
 alert "Listing directory."
 ls -al $TARGETDIR
+sleep 1
 if [ $? -eq 0 ]; then
     last_file=$(ls -tr $TARGETDIR | grep -v mongodb | head -1)
     alert "Getting file content: $TARGETDIR/$last_file"
     cat $TARGETDIR/$last_file | head
+    sleep 1
     random_file="$USER-testing-$RANDOM"
     alert "Testing write: $random_file"
     touch $TARGETDIR/$random_file
+    sleep 1
 fi
-sleep 1
 alert "umounting $TARGETDIR"
 sudo umount $TARGETDIR
 
