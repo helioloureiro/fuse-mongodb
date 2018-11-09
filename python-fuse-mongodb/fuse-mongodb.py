@@ -118,7 +118,8 @@ class PyFuseMongo(Fuse):
 
     def mongo_stat(self, path):
         syslog.syslog(syslog.LOG_NOTICE, "PyFuseMongo.mongo_stat()")
-        if self.path == path:
+        if self.path == path and path != "/":
+            syslog.syslog(syslog.LOG_NOTICE, " * mongo_stat(): already on memory path=%s - just returning" % path)
             # no actions needed
             return self.stat
         syslog.syslog(syslog.LOG_NOTICE, " * mongo_stat(): path=%s" % path)
@@ -256,7 +257,10 @@ class PyFuseMongo(Fuse):
 
     def utime(self, path, times):
         debug("PyFuseMongo.utime()")
-        os.utime("." + path, times)
+        debug(" * utime(): path=%s" % path)
+        debug(" * utime(): path=%d" % times)
+        #os.utime("." + path, times)
+        # set path st_mtime, st_atime
 
 #    The following utimens method would do the same as the above utime method.
 #    We can't make it better though as the Python stdlib doesn't know of
@@ -267,8 +271,15 @@ class PyFuseMongo(Fuse):
 
     def access(self, path, mode):
         debug("PyFuseMongo.access()")
-        if not os.access("." + path, mode):
-            return -EACCES
+        debug(" * access(): path=%s" % path)
+        debug(" * access(): mode=%d" % mode)
+        #if not os.access("." + path, mode):
+        if path in [ "/", ".", ".." ]:
+            return os.F_OK
+        filename = path[1:]
+        if filename in self.listing:
+            return os.F_OK
+        return -EACCES
 
 #    This is how we could add stub extended attribute handlers...
 #    (We can't have ones which aptly delegate requests to the underlying fs
@@ -320,24 +331,30 @@ class PyFuseMongo(Fuse):
 
         def __init__(self, path, flags, *mode):
             debug("PyFuseMongoFile.__init__()")
-            self.file = os.fdopen(os.open("." + path, flags, *mode),
-                                  flag2mode(flags))
-            self.fd = self.file.fileno()
+            debug(" __init__(): path=%s" % path)
+            debug(" __init__(): flags=%d" % flags)
+            self.file = path[1:]
+            #self.fd = 3
+            self.mongo = fusemongolib.MongoInterface()
+            self.file_obj = self.mongo.search_db(self.file)
 
         def read(self, length, offset):
             debug("PyFuseMongoFile.read()")
-            self.file.seek(offset)
-            return self.file.read(length)
+            debug(" * read(): length=%d" % length)
+            debug(" * read(): offset=%d" % offset)
+            #self.file.seek(offset)
+            return self.file_obj["content"][offset:length]
 
         def write(self, buf, offset):
             debug("PyFuseMongoFile.write()")
-            self.file.seek(offset)
-            self.file.write(buf)
+            #self.file.seek(offset)
+            #self.file.write(buf)
+            debug(" * write(): faking response as buf size")
             return len(buf)
 
         def release(self, flags):
             debug("PyFuseMongoFile.release()")
-            self.file.close()
+            #self.file.close()
 
         def _fflush(self):
             debug("PyFuseMongoFile._fflush()")
@@ -354,13 +371,38 @@ class PyFuseMongo(Fuse):
 
         def flush(self):
             debug("PyFuseMongoFile.flush()")
-            self._fflush()
+            #self._fflush()
             # cf. xmp_flush() in fusexmp_fh.c
-            os.close(os.dup(self.fd))
+            #os.close(os.dup(self.fd))
 
         def fgetattr(self):
             debug("PyFuseMongoFile.fgetattr()")
-            return os.fstat(self.fd)
+            fstat = PyFuseMongoStat()
+            permission = self.file_obj['permission']
+            syslog.syslog(syslog.LOG_NOTICE, " * fgetattr(): permission=%d" % permission)
+            uid = self.file_obj['uid']
+            syslog.syslog(syslog.LOG_NOTICE, " * fgetattr(): uid=%d" % uid)
+            gid = self.file_obj['gid']
+            syslog.syslog(syslog.LOG_NOTICE, " * fgetattr(): gid=%d" % gid)
+            content = self.file_obj['content']
+            st_size = len(content)
+            syslog.syslog(syslog.LOG_NOTICE, " * fgetattr(): st_size=%d" % st_size)
+            date_time = self.file_obj['date']
+            st_ctime = date_time.timestamp()
+            syslog.syslog(syslog.LOG_NOTICE, " * fgetattr(): st_ctime=%f" % st_ctime)
+            syslog.syslog(syslog.LOG_NOTICE, " * fgetattr(): date=%s" % time.ctime(st_ctime))
+            fstat.st_mode = stat.S_IFREG | permission
+            fstat.st_ino = 0
+            fstat.st_dev = 0
+            fstat.st_nlink = 1
+            fstat.st_uid = uid
+            fstat.st_gid = gid
+            fstat.st_size = st_size
+            fstat.st_atime = st_ctime
+            fstat.st_mtime = st_ctime
+            fstat.st_ctime = st_ctime
+            syslog.syslog(syslog.LOG_NOTICE, " * fgetattr(): %s" % self.stat.__str__())
+            return stat
 
         def ftruncate(self, len):
             debug("PyFuseMongoFile.ftruncate()")
@@ -368,6 +410,7 @@ class PyFuseMongo(Fuse):
 
         def lock(self, cmd, owner, **kw):
             debug("PyFuseMongoFile.lock()")
+            return
             # The code here is much rather just a demonstration of the locking
             # API than something which actually was seen to be useful.
 
