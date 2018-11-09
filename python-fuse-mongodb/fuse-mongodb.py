@@ -215,45 +215,45 @@ class PyFuseMongo(Fuse):
 
     def unlink(self, path):
         debug("PyFuseMongo.unlink()")
-        os.unlink("." + path)
+        #os.unlink("." + path)
 
     def rmdir(self, path):
         debug("PyFuseMongo.rmdir()")
-        os.rmdir("." + path)
+        #os.rmdir("." + path)
 
     def symlink(self, path, path1):
         debug("PyFuseMongo.symlink()")
-        os.symlink(path, "." + path1)
+        #os.symlink(path, "." + path1)
 
     def rename(self, path, path1):
         debug("PyFuseMongo.rename()")
-        os.rename("." + path, "." + path1)
+        #os.rename("." + path, "." + path1)
 
     def link(self, path, path1):
         debug("PyFuseMongo.link()")
-        os.link("." + path, "." + path1)
+        #os.link("." + path, "." + path1)
 
     def chmod(self, path, mode):
         debug("PyFuseMongo.chmod()")
-        os.chmod("." + path, mode)
+        #os.chmod("." + path, mode)
 
     def chown(self, path, user, group):
         debug("PyFuseMongo.chown()")
-        os.chown("." + path, user, group)
+        #os.chown("." + path, user, group)
 
     def truncate(self, path, len):
         debug("PyFuseMongo.truncate()")
-        f = open("." + path, "a")
-        f.truncate(len)
-        f.close()
+        #f = open("." + path, "a")
+        #f.truncate(len)
+        #f.close()
 
     def mknod(self, path, mode, dev):
         debug("PyFuseMongo.mknod()")
-        os.mknod("." + path, mode, dev)
+        #os.mknod("." + path, mode, dev)
 
     def mkdir(self, path, mode):
         debug("PyFuseMongo.mkdir()")
-        os.mkdir("." + path, mode)
+        #os.mkdir("." + path, mode)
 
     def utime(self, path, times):
         debug("PyFuseMongo.utime()")
@@ -334,7 +334,7 @@ class PyFuseMongo(Fuse):
             debug(" __init__(): path=%s" % path)
             debug(" __init__(): flags=%d" % flags)
             self.file = path[1:]
-            #self.fd = 3
+            self.fd = 3
             self.mongo = fusemongolib.MongoInterface()
             self.file_obj = self.mongo.search_db(self.file)
 
@@ -406,7 +406,7 @@ class PyFuseMongo(Fuse):
 
         def ftruncate(self, len):
             debug("PyFuseMongoFile.ftruncate()")
-            self.file.truncate(len)
+            #self.file.truncate(len)
 
         def lock(self, cmd, owner, **kw):
             debug("PyFuseMongoFile.lock()")
