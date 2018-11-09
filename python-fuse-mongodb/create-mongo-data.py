@@ -7,6 +7,13 @@ import syslog
 import random
 import datetime
 import mipsum
+import sys
+
+PYTHON_MAJOR_MINOR = "%s.%s" % (sys.version_info[0], sys.version_info[1])
+
+if sys.version_info[0] != 3:
+    raise RuntimeError("Use python3.  Your current python version is: %s" % PYTHON_MAJOR_MINOR)
+
 
 def alert(message):
     print(message)
